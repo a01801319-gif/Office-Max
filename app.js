@@ -224,7 +224,7 @@ function processData(initialLoad = false) {
             const promoName = hasPromo ? promoMap[prodLower] : 'Sin Promoción';
 
             uniqueSkus.add(prod);
-            uniquePromos.add(promoName);
+            if(promoName !== 'Sin Promoción') uniquePromos.add(promoName);
 
             if(initialLoad) {
                 globalSalesData.push({
@@ -294,7 +294,7 @@ function processData(initialLoad = false) {
                 skuSelect.appendChild(opt);
             });
 
-            promoSelect.innerHTML = '<option value="ALL">Todas (Histórico Completo)</option>';
+            promoSelect.innerHTML = '<option value="ALL">Todas (Vista Clásica / Histórico)</option>';
             Array.from(uniquePromos).sort().forEach(p => {
                 const opt = document.createElement('option');
                 opt.value = p;
@@ -338,110 +338,154 @@ function processData(initialLoad = false) {
     }
 }
 
-// --- GRÁFICA DE DEEP DIVE (MULTI-EJE) ---
+// --- GRÁFICA DE DEEP DIVE (ANTES / DURANTE / DESPUÉS) ---
 function renderSkuDeepDiveChart() {
     const sku = skuSelect.value;
     const promoFilter = promoSelect.value;
     
     if (!sku) return;
     
-    // Filtrar SOLO por SKU para mantener la línea de tiempo completa (antes, durante, después)
-    const skuData = globalSalesData.filter(item => item.product === sku);
-    
-    const aggregated = {};
-    skuData.forEach(item => {
-        let dateKey = item.date;
-        if (state.groupBy === 'month' && item.date.length >= 7) {
-            const match = item.date.match(/^(\d{4}[-/]\d{2})/);
-            if (match) dateKey = match[1].replace('/', '-');
-        }
-
-        if (!aggregated[dateKey]) {
-            aggregated[dateKey] = { revenue: 0, units: 0, profit: 0, promo: item.promo };
-        }
-        aggregated[dateKey].revenue += item.revenue;
-        aggregated[dateKey].units += item.units;
-        aggregated[dateKey].profit += item.profit;
-        if(aggregated[dateKey].promo !== item.promo) {
-            if(!aggregated[dateKey].promo.includes(item.promo)){
-                aggregated[dateKey].promo += ' & ' + item.promo;
-            }
-        }
-    });
-
-    const labels = Object.keys(aggregated).sort();
-    const revenueData = labels.map(l => aggregated[l].revenue);
-    const unitsData = labels.map(l => aggregated[l].units);
-    const profitData = labels.map(l => aggregated[l].profit);
-    const promosActive = labels.map(l => aggregated[l].promo);
-
-    // Lógica para resaltar visualmente el "Durante" la promoción seleccionada
-    const pointRadiuses = labels.map(l => {
-        if (promoFilter === 'ALL') return 4;
-        return aggregated[l].promo.includes(promoFilter) ? 6 : 2;
-    });
-
-    const barColors = labels.map(l => {
-        if (promoFilter === 'ALL') return 'rgba(59, 130, 246, 0.6)';
-        return aggregated[l].promo.includes(promoFilter) 
-            ? 'rgba(59, 130, 246, 0.9)' // Brillante (Durante)
-            : 'rgba(59, 130, 246, 0.1)'; // Apagado (Antes/Después)
-    });
-
-    const lineColorsRev = labels.map(l => {
-        if (promoFilter === 'ALL') return '#8b5cf6';
-        return aggregated[l].promo.includes(promoFilter) ? '#8b5cf6' : 'rgba(139, 92, 246, 0.2)';
-    });
-
-    const lineColorsProf = labels.map(l => {
-        if (promoFilter === 'ALL') return '#10b981';
-        return aggregated[l].promo.includes(promoFilter) ? '#10b981' : 'rgba(16, 185, 129, 0.2)';
-    });
-
     if (skuChartInstance) {
         skuChartInstance.destroy();
     }
-
     const ctx = document.getElementById('skuDeepDiveChart').getContext('2d');
+
+    const skuData = globalSalesData.filter(item => item.product === sku);
+
+    // LÓGICA SI "TODAS" ESTÁ SELECCIONADO (Vista continua clásica)
+    if (promoFilter === 'ALL') {
+        const aggregated = {};
+        skuData.forEach(item => {
+            let dateKey = item.date;
+            if (state.groupBy === 'month' && item.date.length >= 7) {
+                const match = item.date.match(/^(\d{4}[-/]\d{2})/);
+                if (match) dateKey = match[1].replace('/', '-');
+            }
+            if (!aggregated[dateKey]) {
+                aggregated[dateKey] = { revenue: 0, units: 0, profit: 0, promo: item.promo };
+            }
+            aggregated[dateKey].revenue += item.revenue;
+            aggregated[dateKey].units += item.units;
+            aggregated[dateKey].profit += item.profit;
+        });
+
+        const labels = Object.keys(aggregated).sort();
+        const revenueData = labels.map(l => aggregated[l].revenue);
+        const unitsData = labels.map(l => aggregated[l].units);
+        const profitData = labels.map(l => aggregated[l].profit);
+        
+        skuChartInstance = new Chart(ctx, {
+            type: 'bar', 
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Unidades Vendidas', data: unitsData, type: 'bar', backgroundColor: 'rgba(59, 130, 246, 0.6)', yAxisID: 'y1', order: 3 },
+                    { label: 'Ingresos ($)', data: revenueData, type: 'line', borderColor: '#8b5cf6', backgroundColor: '#8b5cf6', borderWidth: 2, tension: 0.3, yAxisID: 'y', order: 2 },
+                    { label: 'Ganancia ($)', data: profitData, type: 'line', borderColor: '#10b981', backgroundColor: '#10b981', borderDash: [5, 5], borderWidth: 2, tension: 0.3, yAxisID: 'y', order: 1 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Dinero ($)', color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Unidades (Cant.)', color: '#94a3b8' }, grid: { drawOnChartArea: false } }
+                }
+            }
+        });
+        return;
+    }
+
+    // LÓGICA DE 3 FASES (ANTES, DURANTE, DESPUÉS)
+    let minPromoDate = null;
+    let maxPromoDate = null;
+
+    // 1. Encontrar los límites de tiempo de la promoción para este SKU
+    skuData.forEach(item => {
+        if (item.promo === promoFilter) {
+            if (!minPromoDate || item.date < minPromoDate) minPromoDate = item.date;
+            if (!maxPromoDate || item.date > maxPromoDate) maxPromoDate = item.date;
+        }
+    });
+
+    if (!minPromoDate) {
+        // Promoción no encontrada, mostrar gráfica vacía
+        skuChartInstance = new Chart(ctx, { type: 'bar', data: { labels: ['Sin Datos'] }, options: { responsive: true, maintainAspectRatio: false }});
+        return;
+    }
+
+    // 2. Agrupar en los 3 Buckets
+    const buckets = {
+        'Antes de Promo': { revenue: 0, units: 0, profit: 0, daysSet: new Set() },
+        'Durante Promo': { revenue: 0, units: 0, profit: 0, daysSet: new Set() },
+        'Después de Promo': { revenue: 0, units: 0, profit: 0, daysSet: new Set() }
+    };
+
+    skuData.forEach(item => {
+        let bucketName = '';
+        if (item.date < minPromoDate) bucketName = 'Antes de Promo';
+        else if (item.date > maxPromoDate) bucketName = 'Después de Promo';
+        else bucketName = 'Durante Promo';
+
+        buckets[bucketName].revenue += item.revenue;
+        buckets[bucketName].units += item.units;
+        buckets[bucketName].profit += item.profit;
+        buckets[bucketName].daysSet.add(item.date); // Guardamos la fecha única para calcular el promedio diario
+    });
+
+    // 3. Calcular Promedios
+    const labelsPhase = ['Antes de Promo', 'Durante Promo', 'Después de Promo'];
+    const revenueAvg = [];
+    const unitsAvg = [];
+    const profitAvg = [];
+
+    labelsPhase.forEach(l => {
+        const b = buckets[l];
+        const daysCount = b.daysSet.size > 0 ? b.daysSet.size : 1; // Para no dividir entre 0 si la fase no existe
+        
+        revenueAvg.push(b.revenue / daysCount);
+        unitsAvg.push(b.units / daysCount);
+        profitAvg.push(b.profit / daysCount);
+    });
+
+    // 4. Renderizar gráfica de 3 puntos
     skuChartInstance = new Chart(ctx, {
         type: 'bar', 
         data: {
-            labels: labels,
+            labels: labelsPhase,
             datasets: [
                 {
-                    label: 'Unidades Vendidas',
-                    data: unitsData,
+                    label: 'Promedio Unidades Diarias',
+                    data: unitsAvg,
                     type: 'bar',
-                    backgroundColor: barColors, 
+                    backgroundColor: ['rgba(59, 130, 246, 0.4)', 'rgba(59, 130, 246, 1)', 'rgba(59, 130, 246, 0.4)'], 
                     yAxisID: 'y1',
                     order: 3
                 },
                 {
-                    label: 'Ingresos ($)',
-                    data: revenueData,
+                    label: 'Promedio Ingresos Diarios ($)',
+                    data: revenueAvg,
                     type: 'line',
                     borderColor: '#8b5cf6', 
                     backgroundColor: '#8b5cf6',
-                    pointBackgroundColor: lineColorsRev,
-                    pointBorderColor: lineColorsRev,
-                    pointRadius: pointRadiuses,
-                    borderWidth: 2,
-                    tension: 0.3,
+                    pointBackgroundColor: ['rgba(139, 92, 246, 0.4)', '#8b5cf6', 'rgba(139, 92, 246, 0.4)'],
+                    pointRadius: [5, 8, 5],
+                    borderWidth: 3,
+                    tension: 0.1, // Línea más recta para conectar los 3 puntos
                     yAxisID: 'y',
                     order: 2
                 },
                 {
-                    label: 'Ganancia ($)',
-                    data: profitData,
+                    label: 'Promedio Ganancia Diaria ($)',
+                    data: profitAvg,
                     type: 'line',
                     borderColor: '#10b981', 
                     backgroundColor: '#10b981',
-                    pointBackgroundColor: lineColorsProf,
-                    pointBorderColor: lineColorsProf,
-                    pointRadius: pointRadiuses,
+                    pointBackgroundColor: ['rgba(16, 185, 129, 0.4)', '#10b981', 'rgba(16, 185, 129, 0.4)'],
+                    pointRadius: [5, 8, 5],
                     borderDash: [5, 5],
-                    borderWidth: 2,
-                    tension: 0.3,
+                    borderWidth: 3,
+                    tension: 0.1,
                     yAxisID: 'y',
                     order: 1
                 }
@@ -454,10 +498,10 @@ function renderSkuDeepDiveChart() {
             plugins: {
                 tooltip: {
                     callbacks: {
-                        // Agregar el nombre de la campaña al inicio del tooltip
                         beforeTitle: function(context) {
                             const idx = context[0].dataIndex;
-                            return `🏷️ Campaña: ${promosActive[idx]}`;
+                            if (idx === 1) return `🏷️ Analizando: ${promoFilter}`;
+                            return `Periodo Normal`;
                         }
                     }
                 }
@@ -466,12 +510,12 @@ function renderSkuDeepDiveChart() {
                 x: { grid: { display: false } },
                 y: {
                     type: 'linear', display: true, position: 'left',
-                    title: { display: true, text: 'Dinero ($)', color: '#94a3b8' },
+                    title: { display: true, text: 'Promedio Dinero ($)', color: '#94a3b8' },
                     grid: { color: 'rgba(255,255,255,0.05)' }
                 },
                 y1: {
                     type: 'linear', display: true, position: 'right',
-                    title: { display: true, text: 'Unidades (Cant.)', color: '#94a3b8' },
+                    title: { display: true, text: 'Promedio Unidades', color: '#94a3b8' },
                     grid: { drawOnChartArea: false } 
                 }
             }
