@@ -123,6 +123,23 @@
                 </div>
             </div>
 
+            <!-- Análisis Detallado por SKU -->
+            <div class="sku-analysis-panel glass-panel mt-20">
+                <div class="sku-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="margin-bottom: 0; display: flex; align-items: center; gap: 8px; color: var(--primary);">🔍 Deep Dive por Producto (SKU)</h3>
+                    <div class="sku-selector" style="display: flex; align-items: center; gap: 10px;">
+                        <label for="sku-select" style="font-size: 0.9rem; color: var(--text-muted); font-weight: 500;">Seleccionar SKU:</label>
+                        <select id="sku-select" class="control-select" style="padding: 8px 16px; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--text-main); font-family: 'Outfit'; outline: none;">
+                            <option value="">Cargando SKUs...</option>
+                        </select>
+                    </div>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 16px;">Visualiza el cruce de Ingresos, Ganancias y Unidades Vendidas para un producto específico.</p>
+                <div class="chart-container" style="height: 350px;">
+                    <canvas id="skuDeepDiveChart"></canvas>
+                </div>
+            </div>
+
             <!-- Insights Generados por IA -->
             <div class="insights-panel glass-panel mt-20">
                 <h3>🤖 Conclusiones de Inteligencia Artificial (Qwen2)</h3>
@@ -137,7 +154,6 @@
         </section>
     </div>
 
-    <!-- Módulo principal. Type=module es necesario si queremos workers dinámicos desde JS principal, pero lo haremos desde main -->
     <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -22,14 +22,22 @@ const groupBtns = document.querySelectorAll('.control-btn[data-group]');
 const chartBtns = document.querySelectorAll('.control-btn[data-chart]');
 const timelineTitle = document.getElementById('timeline-chart-title');
 
+// SKU Selector Elements
+const skuSelect = document.getElementById('sku-select');
+
 // Datos Globales y Estado
 let dataVentas = null;
 let dataPromos = null;
 let charts = [];
+let skuChartInstance = null; // Para guardar la gráfica de SKU separadamente
+
 let state = {
     groupBy: 'day', // 'day' | 'month'
     chartType: 'line' // 'line' | 'bar'
 };
+
+// Almacenamos los datos procesados limpios para usarlos en filtros rápidos
+let globalSalesData = [];
 
 // --- LLM WORKER SETUP ---
 const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
@@ -133,7 +141,7 @@ groupBtns.forEach(btn => {
         btn.classList.add('active');
         state.groupBy = btn.getAttribute('data-group');
         timelineTitle.textContent = state.groupBy === 'month' ? 'Ventas Promedio Mensuales' : 'Comportamiento de Ventas Diarias';
-        processData(false); // No regenerar IA si solo cambiamos la vista, o sí? Dejémoslo solo visual para no tardar
+        processData(false);
     });
 });
 
@@ -146,6 +154,10 @@ chartBtns.forEach(btn => {
     });
 });
 
+skuSelect.addEventListener('change', (e) => {
+    renderSkuDeepDiveChart(e.target.value);
+});
+
 btnAnalyze.addEventListener('click', () => {
     uploadSection.classList.add('hidden');
     loader.classList.remove('hidden');
@@ -156,23 +168,29 @@ btnReset.addEventListener('click', () => {
     dashboardSection.classList.add('hidden');
     uploadSection.classList.remove('hidden');
     dataVentas = null; dataPromos = null;
+    globalSalesData = [];
     statusVentas.textContent = "Esperando archivo..."; statusVentas.className = "file-status";
     statusPromos.textContent = "Esperando archivo..."; statusPromos.className = "file-status";
     btnAnalyze.disabled = true;
     charts.forEach(c => c.destroy());
     charts = [];
+    if(skuChartInstance) skuChartInstance.destroy();
     aiContainer.innerHTML = '<p class="ai-placeholder">Esperando a la IA...</p>';
 });
 
 // --- LÓGICA PRINCIPAL ---
-function processData(generateAI = false) {
+function processData(initialLoad = false) {
     try {
         if (!dataVentas || dataVentas.length === 0) throw new Error("Base vacía");
         
         const vRow = dataVentas[0];
         const colFecha = findColumn(vRow, ['fecha', 'date', 'dia']);
         const colProducto = findColumn(vRow, ['producto', 'product', 'item', 'sku']);
-        const colVenta = findColumn(vRow, ['venta', 'sales', 'monto', 'ingreso', 'revenue', 'cantidad']);
+        const colVenta = findColumn(vRow, ['venta', 'sales', 'monto', 'ingreso', 'revenue']);
+        
+        // Nuevas columnas para el Deep Dive
+        const colUnidades = findColumn(vRow, ['unidad', 'unit', 'qty', 'cantidad']);
+        const colGanancia = findColumn(vRow, ['ganancia', 'profit', 'margen', 'utilidad', 'costo']); // Costo se podría restar, pero asumimos ganancia directa
         
         const pRow = dataPromos[0] || {};
         const colPromoName = findColumn(pRow, ['promo', 'campaña', 'campaign', 'nombre']);
@@ -187,23 +205,39 @@ function processData(generateAI = false) {
 
         let totalSales = 0;
         let promoSales = 0;
-        const timelineData = {}; // Para agrupar
+        const timelineData = {};
         const productData = {};
         const promoPerformance = {};
+        const uniqueSkus = new Set();
+        
+        if(initialLoad) globalSalesData = []; // Resetear solo en la carga inicial
 
         dataVentas.forEach(v => {
             const val = parseFloat(v[colVenta]) || 0;
             const prod = String(v[colProducto] || 'Desconocido').trim();
             const rawDate = String(v[colFecha] || 'Sin Fecha').trim();
             
+            const unidades = parseFloat(v[colUnidades]) || 1; // Fallback a 1
+            const ganancia = parseFloat(v[colGanancia]) || (val * 0.3); // Fallback a 30% margen si no existe
+            
+            uniqueSkus.add(prod);
+
+            if(initialLoad) {
+                globalSalesData.push({
+                    date: rawDate,
+                    product: prod,
+                    revenue: val,
+                    units: unidades,
+                    profit: ganancia
+                });
+            }
+
             // Agrupación de fechas
             let dateKey = rawDate;
             if (state.groupBy === 'month' && rawDate.length >= 7) {
-                // Si viene como Excel serial, habría que convertirlo, pero asumiremos string YYYY-MM-DD
-                // Intentar extraer YYYY-MM
                 const match = rawDate.match(/^(\d{4}[-/]\d{2})/);
                 if (match) dateKey = match[1].replace('/', '-');
-                else dateKey = rawDate; // Fallback
+                else dateKey = rawDate;
             }
 
             const prodLower = prod.toLowerCase();
@@ -231,14 +265,9 @@ function processData(generateAI = false) {
             }
         });
 
-        // Si agrupa por mes, calcular el promedio en lugar de la suma total del mes?
-        // El usuario pidió "comportamientos de las ventas en promedio por mes".
-        // Transformar la data del timeline a promedio si state.groupBy === 'month'
         const chartTimelineData = {};
         Object.keys(timelineData).forEach(key => {
             if (state.groupBy === 'month') {
-                // Promedio de venta por registro en ese mes (o promedio diario si tuviéramos días únicos)
-                // Para simplificar, dividiremos por la cantidad de registros (días).
                 const count = timelineData[key].count || 1;
                 chartTimelineData[key] = {
                     promo: timelineData[key].promo / count,
@@ -249,15 +278,25 @@ function processData(generateAI = false) {
             }
         });
 
-        // KPIs
+        // Actualizar KPIs
         document.getElementById('kpi-total-sales').textContent = `$${totalSales.toLocaleString('es-MX', {maximumFractionDigits:0})}`;
         document.getElementById('kpi-promo-sales').textContent = `$${promoSales.toLocaleString('es-MX', {maximumFractionDigits:0})}`;
         const promoPct = totalSales > 0 ? ((promoSales / totalSales) * 100).toFixed(1) : 0;
         document.getElementById('kpi-promo-percentage').textContent = `${promoPct}% del total`;
-
         const normalSales = totalSales - promoSales;
         const lift = normalSales > 0 ? ((promoSales / normalSales) * 100).toFixed(1) : 0;
         document.getElementById('kpi-lift').textContent = `+${lift}%`;
+
+        // Llenar Selector de SKU solo en la carga inicial
+        if (initialLoad) {
+            skuSelect.innerHTML = '<option value="">-- Selecciona un producto --</option>';
+            Array.from(uniqueSkus).sort().forEach(sku => {
+                const opt = document.createElement('option');
+                opt.value = sku;
+                opt.textContent = sku;
+                skuSelect.appendChild(opt);
+            });
+        }
 
         // Destruir gráficas viejas
         charts.forEach(c => c.destroy());
@@ -267,14 +306,23 @@ function processData(generateAI = false) {
         renderTimelineChart(chartTimelineData);
         renderProductChart(productData);
         renderPromoChart(promoPerformance);
+        
+        // Auto-renderizar Deep Dive si hay uno seleccionado
+        if (skuSelect.value) {
+            renderSkuDeepDiveChart(skuSelect.value);
+        } else if (initialLoad && uniqueSkus.size > 0) {
+            // Seleccionar el primero por defecto
+            const firstSku = Array.from(uniqueSkus).sort()[0];
+            skuSelect.value = firstSku;
+            renderSkuDeepDiveChart(firstSku);
+        }
 
         // Llamar a la IA
-        if (generateAI) {
+        if (initialLoad) {
             let bestPromo = "N/A";
             if (Object.keys(promoPerformance).length > 0) {
                 bestPromo = Object.keys(promoPerformance).reduce((a, b) => promoPerformance[a] > promoPerformance[b] ? a : b);
             }
-            
             worker.postMessage({
                 action: 'analyze',
                 stats: { totalSales, promoSales, promoPct, lift, bestPromo }
@@ -291,7 +339,108 @@ function processData(generateAI = false) {
     }
 }
 
-// --- GRÁFICAS ---
+// --- GRÁFICA DE DEEP DIVE (MULTI-EJE) ---
+function renderSkuDeepDiveChart(sku) {
+    if (!sku) return;
+    
+    // Filtrar datos para este SKU
+    const skuData = globalSalesData.filter(item => item.product === sku);
+    
+    // Agrupar por fecha cronológicamente
+    const aggregated = {};
+    skuData.forEach(item => {
+        // En Deep Dive siempre mostramos días, o respetamos el groupBy?
+        // Respetemos el groupBy para consistencia
+        let dateKey = item.date;
+        if (state.groupBy === 'month' && item.date.length >= 7) {
+            const match = item.date.match(/^(\d{4}[-/]\d{2})/);
+            if (match) dateKey = match[1].replace('/', '-');
+        }
+
+        if (!aggregated[dateKey]) {
+            aggregated[dateKey] = { revenue: 0, units: 0, profit: 0 };
+        }
+        aggregated[dateKey].revenue += item.revenue;
+        aggregated[dateKey].units += item.units;
+        aggregated[dateKey].profit += item.profit;
+    });
+
+    const labels = Object.keys(aggregated).sort();
+    const revenueData = labels.map(l => aggregated[l].revenue);
+    const unitsData = labels.map(l => aggregated[l].units);
+    const profitData = labels.map(l => aggregated[l].profit);
+
+    if (skuChartInstance) {
+        skuChartInstance.destroy();
+    }
+
+    const ctx = document.getElementById('skuDeepDiveChart').getContext('2d');
+    skuChartInstance = new Chart(ctx, {
+        type: 'bar', // Base chart type
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Unidades Vendidas',
+                    data: unitsData,
+                    type: 'bar',
+                    backgroundColor: 'rgba(59, 130, 246, 0.6)', // Azul secundario
+                    yAxisID: 'y1',
+                    order: 3
+                },
+                {
+                    label: 'Ingresos ($)',
+                    data: revenueData,
+                    type: 'line',
+                    borderColor: '#8b5cf6', // Morado primario
+                    backgroundColor: '#8b5cf6',
+                    borderWidth: 3,
+                    tension: 0.3,
+                    yAxisID: 'y',
+                    order: 2
+                },
+                {
+                    label: 'Ganancia ($)',
+                    data: profitData,
+                    type: 'line',
+                    borderColor: '#10b981', // Verde success
+                    backgroundColor: '#10b981',
+                    borderDash: [5, 5],
+                    borderWidth: 3,
+                    tension: 0.3,
+                    yAxisID: 'y',
+                    order: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: {
+                    grid: { display: false }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: { display: true, text: 'Dinero ($)', color: '#94a3b8' },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: { display: true, text: 'Unidades (Cant.)', color: '#94a3b8' },
+                    grid: { drawOnChartArea: false } // no dibujar lineas para no empalmar
+                }
+            }
+        }
+    });
+}
+
+// --- GRÁFICAS EXISTENTES ---
 Chart.defaults.color = '#94a3b8';
 Chart.defaults.font.family = 'Outfit';
 
