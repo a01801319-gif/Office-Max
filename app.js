@@ -345,14 +345,8 @@ function renderSkuDeepDiveChart() {
     
     if (!sku) return;
     
-    // Filtrar por SKU y Promoción
-    const skuData = globalSalesData.filter(item => {
-        let match = (item.product === sku);
-        if (promoFilter !== 'ALL') {
-            match = match && (item.promo === promoFilter);
-        }
-        return match;
-    });
+    // Filtrar SOLO por SKU para mantener la línea de tiempo completa (antes, durante, después)
+    const skuData = globalSalesData.filter(item => item.product === sku);
     
     const aggregated = {};
     skuData.forEach(item => {
@@ -368,7 +362,6 @@ function renderSkuDeepDiveChart() {
         aggregated[dateKey].revenue += item.revenue;
         aggregated[dateKey].units += item.units;
         aggregated[dateKey].profit += item.profit;
-        // Si hay varias promos en el mismo día/mes (raro pero posible), mantenemos la última o concatenamos
         if(aggregated[dateKey].promo !== item.promo) {
             if(!aggregated[dateKey].promo.includes(item.promo)){
                 aggregated[dateKey].promo += ' & ' + item.promo;
@@ -380,7 +373,30 @@ function renderSkuDeepDiveChart() {
     const revenueData = labels.map(l => aggregated[l].revenue);
     const unitsData = labels.map(l => aggregated[l].units);
     const profitData = labels.map(l => aggregated[l].profit);
-    const promosActive = labels.map(l => aggregated[l].promo); // Para tooltips
+    const promosActive = labels.map(l => aggregated[l].promo);
+
+    // Lógica para resaltar visualmente el "Durante" la promoción seleccionada
+    const pointRadiuses = labels.map(l => {
+        if (promoFilter === 'ALL') return 4;
+        return aggregated[l].promo.includes(promoFilter) ? 6 : 2;
+    });
+
+    const barColors = labels.map(l => {
+        if (promoFilter === 'ALL') return 'rgba(59, 130, 246, 0.6)';
+        return aggregated[l].promo.includes(promoFilter) 
+            ? 'rgba(59, 130, 246, 0.9)' // Brillante (Durante)
+            : 'rgba(59, 130, 246, 0.1)'; // Apagado (Antes/Después)
+    });
+
+    const lineColorsRev = labels.map(l => {
+        if (promoFilter === 'ALL') return '#8b5cf6';
+        return aggregated[l].promo.includes(promoFilter) ? '#8b5cf6' : 'rgba(139, 92, 246, 0.2)';
+    });
+
+    const lineColorsProf = labels.map(l => {
+        if (promoFilter === 'ALL') return '#10b981';
+        return aggregated[l].promo.includes(promoFilter) ? '#10b981' : 'rgba(16, 185, 129, 0.2)';
+    });
 
     if (skuChartInstance) {
         skuChartInstance.destroy();
@@ -396,7 +412,7 @@ function renderSkuDeepDiveChart() {
                     label: 'Unidades Vendidas',
                     data: unitsData,
                     type: 'bar',
-                    backgroundColor: 'rgba(59, 130, 246, 0.6)', 
+                    backgroundColor: barColors, 
                     yAxisID: 'y1',
                     order: 3
                 },
@@ -406,7 +422,10 @@ function renderSkuDeepDiveChart() {
                     type: 'line',
                     borderColor: '#8b5cf6', 
                     backgroundColor: '#8b5cf6',
-                    borderWidth: 3,
+                    pointBackgroundColor: lineColorsRev,
+                    pointBorderColor: lineColorsRev,
+                    pointRadius: pointRadiuses,
+                    borderWidth: 2,
                     tension: 0.3,
                     yAxisID: 'y',
                     order: 2
@@ -417,8 +436,11 @@ function renderSkuDeepDiveChart() {
                     type: 'line',
                     borderColor: '#10b981', 
                     backgroundColor: '#10b981',
+                    pointBackgroundColor: lineColorsProf,
+                    pointBorderColor: lineColorsProf,
+                    pointRadius: pointRadiuses,
                     borderDash: [5, 5],
-                    borderWidth: 3,
+                    borderWidth: 2,
                     tension: 0.3,
                     yAxisID: 'y',
                     order: 1
