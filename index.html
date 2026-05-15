@@ -17,9 +17,14 @@
         <header>
             <div class="logo">
                 <div class="logo-icon">📈</div>
-                <h1>Promo<span class="highlight">Analytics</span></h1>
+                <h1>Promo<span class="highlight">Analytics</span> AI</h1>
             </div>
-            <p class="subtitle">Descubre el impacto real de tus promociones en las ventas</p>
+            <p class="subtitle">Descubre el impacto real de tus promociones potenciado por IA local</p>
+            
+            <!-- Estado del LLM Oculto inicialmente -->
+            <div id="llm-status-badge" class="llm-badge hidden">
+                <span class="pulse-dot"></span> Cargando cerebro de IA (Modelo Qwen)...
+            </div>
         </header>
 
         <!-- Sección de subida de archivos -->
@@ -52,11 +57,30 @@
         <!-- Loader -->
         <div id="loader" class="loader-container hidden">
             <div class="spinner"></div>
-            <p>Cruzando datos y generando insights...</p>
+            <p>Cruzando datos y calculando métricas...</p>
         </div>
 
         <!-- Dashboard de Resultados -->
         <section id="dashboard-section" class="hidden fade-in">
+            
+            <!-- Panel de Control Interactivo -->
+            <div class="controls-panel glass-panel">
+                <div class="control-group">
+                    <label>Agrupar datos de tiempo por:</label>
+                    <div class="toggle-buttons">
+                        <button class="control-btn active" data-group="day">Día (Suma)</button>
+                        <button class="control-btn" data-group="month">Mes (Promedio Diario)</button>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Tipo de Gráfica de Tiempo:</label>
+                    <div class="toggle-buttons">
+                        <button class="control-btn active" data-chart="line">Líneas</button>
+                        <button class="control-btn" data-chart="bar">Barras</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- KPIs -->
             <div class="kpi-grid">
                 <div class="kpi-card glass-panel">
@@ -78,7 +102,7 @@
             <!-- Gráficas Principales -->
             <div class="charts-grid">
                 <div class="chart-card glass-panel col-span-2">
-                    <h3>Comportamiento de Ventas en el Tiempo</h3>
+                    <h3 id="timeline-chart-title">Comportamiento de Ventas en el Tiempo</h3>
                     <div class="chart-container">
                         <canvas id="timelineChart"></canvas>
                     </div>
@@ -99,12 +123,12 @@
                 </div>
             </div>
 
-            <!-- Insights Generados por IA/Matemática -->
+            <!-- Insights Generados por IA -->
             <div class="insights-panel glass-panel mt-20">
-                <h3>💡 Insights Clave Descubiertos</h3>
-                <ul id="insights-list" class="insights-list">
-                    <!-- Los insights se llenarán dinámicamente -->
-                </ul>
+                <h3>🤖 Conclusiones de Inteligencia Artificial (Qwen2)</h3>
+                <div id="ai-typing-container" class="ai-container">
+                    <p class="ai-placeholder">Esperando a la IA...</p>
+                </div>
             </div>
             
             <div class="action-bar" style="margin-top: 30px;">
@@ -113,6 +137,7 @@
         </section>
     </div>
 
-    <script src="app.js"></script>
+    <!-- Módulo principal. Type=module es necesario si queremos workers dinámicos desde JS principal, pero lo haremos desde main -->
+    <script type="module" src="app.js"></script>
 </body>
 </html>

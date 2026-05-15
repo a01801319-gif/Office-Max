@@ -4,7 +4,7 @@
     --border-color: rgba(255, 255, 255, 0.1);
     --text-main: #f8fafc;
     --text-muted: #94a3b8;
-    --primary: #8b5cf6; /* Morado elegante */
+    --primary: #8b5cf6;
     --primary-hover: #7c3aed;
     --secondary: #3b82f6;
     --success: #10b981;
@@ -37,6 +37,7 @@ body {
 header {
     text-align: center;
     margin-bottom: 3rem;
+    position: relative;
 }
 
 .logo {
@@ -64,9 +65,50 @@ h1 {
 .subtitle {
     color: var(--text-muted);
     font-size: 1.1rem;
+    margin-bottom: 15px;
 }
 
-/* Glassmorphism Classes */
+/* LLM Badge */
+.llm-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(139, 92, 246, 0.15);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    color: #c4b5fd;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.llm-badge.ready {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #6ee7b7;
+}
+
+.pulse-dot {
+    width: 8px;
+    height: 8px;
+    background-color: #c4b5fd;
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+}
+
+.llm-badge.ready .pulse-dot {
+    background-color: #6ee7b7;
+    animation: none;
+    box-shadow: 0 0 8px #6ee7b7;
+}
+
+@keyframes pulse {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(196, 181, 253, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(196, 181, 253, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(196, 181, 253, 0); }
+}
+
+/* Glassmorphism */
 .glass-panel {
     background: var(--bg-card);
     backdrop-filter: blur(12px);
@@ -75,6 +117,59 @@ h1 {
     border-radius: 16px;
     padding: 24px;
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* Controls Panel */
+.controls-panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    padding: 16px 24px;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.control-group label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.toggle-buttons {
+    display: flex;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 4px;
+}
+
+.control-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s;
+    font-family: 'Outfit', sans-serif;
+}
+
+.control-btn:hover {
+    color: var(--text-main);
+}
+
+.control-btn.active {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 2px 10px var(--glow);
 }
 
 /* Upload Section */
@@ -198,11 +293,6 @@ h1 {
     margin: 0 auto 20px auto;
 }
 
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
 /* Dashboard */
 .kpi-grid {
     display: grid;
@@ -276,7 +366,7 @@ h1 {
 
 .mt-20 { margin-top: 24px; }
 
-/* Insights */
+/* AI Container */
 .insights-panel h3 {
     display: flex;
     align-items: center;
@@ -285,17 +375,27 @@ h1 {
     color: var(--primary);
 }
 
-.insights-list {
-    list-style: none;
-}
-
-.insights-list li {
-    padding: 12px 16px;
+.ai-container {
     background: rgba(0, 0, 0, 0.2);
     border-radius: 8px;
-    margin-bottom: 10px;
-    border-left: 4px solid var(--secondary);
-    line-height: 1.5;
+    padding: 20px;
+    border-left: 4px solid var(--primary);
+    min-height: 100px;
+    font-size: 1.05rem;
+    line-height: 1.6;
+    white-space: pre-wrap; /* Respeta los saltos de línea del LLM */
+}
+
+.ai-placeholder {
+    color: var(--text-muted);
+    font-style: italic;
+    animation: blink 2s infinite;
+}
+
+@keyframes blink {
+    0% { opacity: 0.4; }
+    50% { opacity: 1; }
+    100% { opacity: 0.4; }
 }
 
 /* Utils */
